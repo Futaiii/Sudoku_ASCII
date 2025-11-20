@@ -1,0 +1,11 @@
+{
+  "mode": "server/client",
+  "local_port": 1080,
+  "server_address": "0.0.0.0:8080",
+  "fallback_address": "127.0.0.1:80",
+  "key": "your-secret-password",
+  "aead": "chacha20-poly1305 / aes-128-gcm / none",
+  "suspicious_action": "fallback / silent",
+  "padding_min": 5,
+  "padding_max": 15
+}
