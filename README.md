@@ -4,6 +4,10 @@
 
 # Sudoku ASCII
 
+[![构建状态](https://img.shields.io/github/actions/workflow/status/Futaiii/Sudoku_ASCII/.github/workflows/release.yml?branch=main&style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/actions)
+[![最新版本](https://img.shields.io/github/v/release/Futaiii/Sudoku_ASCII?style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/releases)
+[![许可证](https://img.shields.io/github/license/Futaiii/Sudoku_ASCII?style=for-the-badge)](./LICENSE)
+
 Sudoku ASCII 是一个基于组合数学的流量混淆协议。它通过将任意数据流映射为生成的 4x4 数独谜题提示，将加密流量伪装成普通的逻辑游戏数据。
 
 该项目的核心理念是利用数独网格的数学特性，实现 O(1) 复杂度的快速编码与解码，同时提供抗主动探测能力。
@@ -18,13 +22,18 @@ Sudoku ASCII 是一个基于组合数学的流量混淆协议。它通过将任�
 *   **高效转换**: 利用空间换时间策略，初始化时生成映射表，运行时仅需查表操作。
 
 ### 安全与加密
-在混淆层之下，协议强制采用 AEAD（关联数据的认证加密）保护数据完整性与机密性。
+在混淆层之下，协议可选的采用 AEAD（关联数据的认证加密）保护数据完整性与机密性。
 *   **算法支持**: AES-128-GCM 或 ChaCha20-Poly1305。
 *   **防重放**: 握手阶段包含时间戳校验，有效防止重放攻击。
 
 ### 防御性回落 (Fallback)
 当服务器检测到非法的握手请求、超时的连接或格式错误的数据包时，不会直接断开连接（这通常是识别代理服务器的特征），而是将连接无缝转发至指定的诱饵地址（如 Nginx 或 Apache 服务器）。探测者只会看到一个普通的网页服务器响应。
 
+### 缺点（TODO）
+1.  **数据包格式**: 仅支持 TCP 数据包。
+2.  **带宽利用率**: 低于30%，推荐线路好的或者带宽高的用户使用，另外推荐机场主使用，可以有效增加用户的流量。
+3.  **客户端代理**: 仅支持socks5。
+4.  **协议普及度**: 暂无安卓/图形化，以及其他内核兼容。
 
 <p align="center">
   <img src="./assets/logo-brutal.svg" width="100%">
@@ -57,7 +66,13 @@ go build -o sudoku cmd/sudoku-tunnel/main.go
 
 ### 客户端配置
 
-将 `mode` 改为 `client`，并设置 `server_address` 为服务端 IP，将`local_port` 设置为代理监听端口，将 `key` 设置为密钥，将 `aead` 设置为加密算法即可。其他字段可删除。
+将 `mode` 改为 `client`，并设置 `server_address` 为服务端 IP，将`local_port` 设置为代理监听端口，将 `key` 设置为密钥，将 `aead` 设置为加密算法即可，将`geoip_url`使用configs/config.json的模板填充即可。其他字段可删除。
+
+### 运行
+将 `config.json` 放置在sudoku同一目录下，并运行
+```bash
+./sudoku
+```
 
 ## 协议流程
 
@@ -69,6 +84,20 @@ go build -o sudoku cmd/sudoku-tunnel/main.go
 ---
 
 
+## Disclaimer
+> [!NOTE]\
+> This software is for educational and research purposes only. Users are responsible for complying with local network regulations.
 
-### Disclaimer
-This software is for educational and research purposes only. Users are responsible for complying with local network regulations.
+## 鸣谢
+
+- [链接1](https://gfw.report/publications/usenixsecurity23/zh/)
+- [链接2](https://github.com/enfein/mieru/issues/8)
+- [链接3](https://github.com/zhaohuabing/lightsocks)
+- [链接4](https://imciel.com/2020/08/27/create-custom-tunnel/)
+- [链接5](https://oeis.org/A109252)
+- [链接6](https://pi.math.cornell.edu/~mec/Summer2009/Mahmood/Four.html)
+
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Futaiii/Sudoku_ASCII&type=Date)](https://star-history.com/#Futaiii/Sudoku_ASCII)
