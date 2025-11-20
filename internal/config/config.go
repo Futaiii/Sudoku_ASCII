@@ -15,6 +15,8 @@ type Config struct {
 	SuspiciousAction string `json:"suspicious_action"` // "fallback" or "silent"
 	PaddingMin       int    `json:"padding_min"`
 	PaddingMax       int    `json:"padding_max"`
+	GeoIPURL         string `json:"geoip_url"`  // 留空则使用默认，支持 "global", "direct" 关键字
+	ProxyMode        string `json:"proxy_mode"` // 运行时状态，非JSON字段，由Load解析逻辑填充
 }
 
 func Load(path string) (*Config, error) {
@@ -28,5 +30,16 @@ func Load(path string) (*Config, error) {
 	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
 		return nil, err
 	}
+
+	if cfg.GeoIPURL == "global" || cfg.GeoIPURL == "direct" {
+		cfg.ProxyMode = cfg.GeoIPURL
+	} else {
+		cfg.ProxyMode = "pac"
+		if cfg.GeoIPURL == "" {
+			// 默认使用 gh-proxy 代理 raw github 链接
+			cfg.GeoIPURL = "https://gh-proxy.org/https://raw.githubusercontent.com/fernvenue/chn-cidr-list/master/ipv4.txt"
+		}
+	}
+
 	return &cfg, nil
 }

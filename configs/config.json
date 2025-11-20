@@ -7,5 +7,6 @@
   "aead": "chacha20-poly1305 / aes-128-gcm / none",
   "suspicious_action": "fallback / silent",
   "padding_min": 5,
-  "padding_max": 15
+  "padding_max": 15,
+  "geoip_url": "https://gh-proxy.org/https://raw.githubusercontent.com/fernvenue/chn-cidr-list/master/ipv4.txt | global | direct"
 }
