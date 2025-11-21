@@ -1,5 +1,6 @@
 {
   "mode": "server/client",
+  "transport": "tcp / kcp",
   "local_port": 1080,
   "server_address": "0.0.0.0:8080",
   "fallback_address": "127.0.0.1:80",

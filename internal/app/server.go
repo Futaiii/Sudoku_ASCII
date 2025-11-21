@@ -14,16 +14,18 @@ import (
 	"github.com/Futaiii/Sudoku_ASCII/internal/protocol"
 	"github.com/Futaiii/Sudoku_ASCII/pkg/crypto"
 	"github.com/Futaiii/Sudoku_ASCII/pkg/obfs/sudoku"
+	"github.com/Futaiii/Sudoku_ASCII/pkg/transport"
 )
 
 const HandshakeTimeout = 5 * time.Second
 
 func RunServer(cfg *config.Config, table *sudoku.Table) {
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.LocalPort))
+	// Use transport abstraction
+	l, err := transport.Listen(cfg.Transport, fmt.Sprintf(":%d", cfg.LocalPort))
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Server on :%d (Fallback: %s)", cfg.LocalPort, cfg.FallbackAddr)
+	log.Printf("Server on :%d (%s) (Fallback: %s)", cfg.LocalPort, cfg.Transport, cfg.FallbackAddr)
 
 	for {
 		c, err := l.Accept()
@@ -44,7 +46,6 @@ func handleServerConn(rawConn net.Conn, cfg *config.Config, table *sudoku.Table)
 		rawConn.Close()
 		return
 	}
-
 	defer cConn.Close()
 
 	// 3. 验证握手
@@ -66,35 +67,62 @@ func handleServerConn(rawConn net.Conn, cfg *config.Config, table *sudoku.Table)
 		return
 	}
 
-	// 握手成功，停止记录
 	sConn.StopRecording()
 
 	// 4. 读取目标地址 (由 Client 端在握手后立即发送)
-	destAddrStr, _, _, err := protocol.ReadAddress(cConn)
+	netType, destAddrStr, _, err := protocol.ReadHeader(cConn)
 	if err != nil {
-		log.Printf("[Server] Failed to read target address: %v", err)
+		log.Printf("[Server] Failed to read header: %v", err)
 		return
 	}
 
 	log.Printf("[Server] Connecting to %s", destAddrStr)
 
-	// 5. 连接目标
-	target, err := net.DialTimeout("tcp", destAddrStr, 10*time.Second)
+	if netType == protocol.NetTypeUDP {
+		handleUDPForward(cConn, destAddrStr)
+	} else {
+		handleTCPForward(cConn, destAddrStr)
+	}
+}
+
+func handleTCPForward(conn net.Conn, destAddr string) {
+	target, err := net.DialTimeout("tcp", destAddr, 10*time.Second)
 	if err != nil {
 		log.Printf("[Server] Connect failed: %v", err)
 		return
 	}
 	defer target.Close()
 
-	// 6. 转发数据
 	go func() {
 		buf := make([]byte, 32*1024)
-		io.CopyBuffer(target, cConn, buf)
-		target.Close() // 即使单向结束也关闭连接
+		io.CopyBuffer(target, conn, buf)
+		target.Close()
 	}()
 
 	buf2 := make([]byte, 32*1024)
-	io.CopyBuffer(cConn, target, buf2)
+	io.CopyBuffer(conn, target, buf2)
+}
+
+func handleUDPForward(tunnelConn net.Conn, destAddr string) {
+	// Dial UDP to target
+	udpConn, err := net.DialTimeout("udp", destAddr, 10*time.Second)
+	if err != nil {
+		log.Printf("[UDP] Dial failed: %v", err)
+		return
+	}
+	defer udpConn.Close()
+
+	// 1. Tunnel -> Target
+	go func() {
+		buf := make([]byte, 65535)
+		io.CopyBuffer(udpConn, tunnelConn, buf)
+	}()
+
+	// 2. Target -> Tunnel
+	// UDP is connectionless, but net.Dial("udp") binds it to the remote addr,
+	// so Read() only returns packets from that remote addr.
+	buf2 := make([]byte, 65535)
+	io.CopyBuffer(tunnelConn, udpConn, buf2)
 }
 
 func abs(x int64) int64 {
