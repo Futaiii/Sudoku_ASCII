@@ -7,7 +7,8 @@ import (
 )
 
 type Config struct {
-	Mode             string `json:"mode"` // "client" or "server"
+	Mode             string `json:"mode"`      // "client" or "server"
+	Transport        string `json:"transport"` // "tcp" or "kcp"
 	LocalPort        int    `json:"local_port"`
 	ServerAddress    string `json:"server_address"`
 	FallbackAddr     string `json:"fallback_address"`
@@ -31,6 +32,14 @@ func Load(path string) (*Config, error) {
 	var cfg Config
 	if err := json.NewDecoder(f).Decode(&cfg); err != nil {
 		return nil, err
+	}
+
+	if cfg.Transport == "" {
+		cfg.Transport = "tcp"
+	}
+
+	if cfg.ASCII == "" {
+		cfg.ASCII = "prefer_entropy"
 	}
 
 	if cfg.GeoIPURL == "global" || cfg.GeoIPURL == "direct" {
