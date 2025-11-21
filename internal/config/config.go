@@ -1,3 +1,4 @@
+// internal/config/config.go
 package config
 
 import (
@@ -17,6 +18,7 @@ type Config struct {
 	PaddingMax       int    `json:"padding_max"`
 	GeoIPURL         string `json:"geoip_url"`  // 留空则使用默认，支持 "global", "direct" 关键字
 	ProxyMode        string `json:"proxy_mode"` // 运行时状态，非JSON字段，由Load解析逻辑填充
+	ASCII            string `json:"ascii"`      // "prefer_entropy" (默认): 旧模式, 低熵, 二进制混淆"，prefer_ascii": 新模式, 纯ASCII字符，高熵
 }
 
 func Load(path string) (*Config, error) {

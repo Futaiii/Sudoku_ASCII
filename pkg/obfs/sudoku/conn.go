@@ -1,3 +1,4 @@
+// pkg/obfs/sudoku/conn.go
 package sudoku
 
 import (
@@ -29,7 +30,6 @@ type Conn struct {
 	paddingRate float32
 }
 
-// NewConn creates a new Sudoku obfuscated connection
 func NewConn(c net.Conn, table *Table, pMin, pMax int, record bool) *Conn {
 	var seedBytes [8]byte
 	if _, err := crypto_rand.Read(seedBytes[:]); err != nil {
@@ -104,6 +104,7 @@ func (sc *Conn) Write(p []byte) (n int, err error) {
 		puzzles := sc.table.EncodeTable[b]
 		puzzle := puzzles[sc.rng.Intn(len(puzzles))]
 
+		// Shuffle hints
 		perm := []int{0, 1, 2, 3}
 		sc.rng.Shuffle(4, func(i, j int) { perm[i], perm[j] = perm[j], perm[i] })
 
@@ -149,7 +150,24 @@ func (sc *Conn) Read(p []byte) (n int, err error) {
 			sc.recordLock.Unlock()
 
 			for _, b := range chunk {
-				if (b & 0x90) != 0 {
+				isPadding := false
+
+				if sc.table.IsASCII {
+					// === ASCII Mode ===
+					// Padding: 001xxxxx (Bit 6 is 0) -> (b & 0x40) == 0
+					// Hint:    01vvpppp (Bit 6 is 1) -> (b & 0x40) != 0
+					if (b & 0x40) == 0 {
+						isPadding = true
+					}
+				} else {
+					// === Entropy Mode ===
+					// Padding: 0x80... or 0x10... -> (b & 0x90) != 0
+					if (b & 0x90) != 0 {
+						isPadding = true
+					}
+				}
+
+				if isPadding {
 					continue
 				}
 
@@ -158,6 +176,7 @@ func (sc *Conn) Read(p []byte) (n int, err error) {
 					key := packHintsToKey([4]byte{sc.hintBuf[0], sc.hintBuf[1], sc.hintBuf[2], sc.hintBuf[3]})
 					val, ok := sc.table.DecodeMap[key]
 					if !ok {
+						// 在 ASCII 模式下，这可能是非常严重的错误或攻击
 						return 0, errors.New("INVALID_SUDOKU_MAP_MISS")
 					}
 					sc.pendingData = append(sc.pendingData, val)

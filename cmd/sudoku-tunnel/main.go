@@ -1,3 +1,4 @@
+// cmd/sudoku-tunnel/main.go
 package main
 
 import (
@@ -14,8 +15,8 @@ func main() {
 		log.Fatal("Failed to load config:", err)
 	}
 
-	// Initialize shared tables once
-	table := sudoku.NewTable(cfg.Key)
+	// Pass the ASCII mode preference
+	table := sudoku.NewTable(cfg.Key, cfg.ASCII)
 
 	if cfg.Mode == "client" {
 		app.RunClient(cfg, table)

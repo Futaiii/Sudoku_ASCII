@@ -8,5 +8,6 @@
   "suspicious_action": "fallback / silent",
   "padding_min": 5,
   "padding_max": 15,
+  "ascii": "prefer_entropy",
   "geoip_url": "https://gh-proxy.org/https://raw.githubusercontent.com/fernvenue/chn-cidr-list/master/ipv4.txt | global | direct"
 }

@@ -1,3 +1,4 @@
+// internal/app/server.go
 package app
 
 import (

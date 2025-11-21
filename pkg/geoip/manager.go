@@ -1,3 +1,4 @@
+// pkg/geoip/manager.go
 package geoip
 
 import (

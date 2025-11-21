@@ -1,3 +1,4 @@
+// internal/app/client.go
 package app
 
 import (
@@ -18,7 +19,6 @@ import (
 )
 
 func RunClient(cfg *config.Config, table *sudoku.Table) {
-	// 初始化 GeoIP 管理器
 	var geoMgr *geoip.Manager
 	if cfg.ProxyMode == "pac" {
 		geoMgr = geoip.GetInstance(cfg.GeoIPURL)
@@ -28,7 +28,8 @@ func RunClient(cfg *config.Config, table *sudoku.Table) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Client (SOCKS5) on :%d -> Server: %s | Mode: %s", cfg.LocalPort, cfg.ServerAddress, cfg.ProxyMode)
+	log.Printf("Client on :%d -> %s | Mode: %s | Obfs: %s",
+		cfg.LocalPort, cfg.ServerAddress, cfg.ProxyMode, cfg.ASCII)
 
 	for {
 		c, err := l.Accept()
@@ -55,27 +56,21 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 		return
 	}
 	conn.Write([]byte{0x05, 0x00})
-
 	// 2. 读取请求详情 (CMD, DST.ADDR, DST.PORT)
-	// 注意：我们手动读取头部，但使用 protocol.ReadAddress 读取地址部分
-	header := make([]byte, 3) // VER, CMD, RSV
+	header := make([]byte, 3)
 	if _, err := io.ReadFull(conn, header); err != nil {
 		return
 	}
-
-	if header[1] != 0x01 { // 仅支持 CONNECT
-		log.Printf("[SOCKS5] Unsupported CMD: %d", header[1])
+	if header[1] != 0x01 {
 		return
 	}
 
-	// 读取目标地址
 	destAddrStr, _, destIP, err := protocol.ReadAddress(conn)
 	if err != nil {
-		log.Printf("[SOCKS5] Failed to read addr: %v", err)
 		return
 	}
 
-	// 3. 路由决策 (PAC)
+	// 3. 路由决策
 	shouldProxy := true
 
 	if cfg.ProxyMode == "global" {
@@ -83,10 +78,8 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 	} else if cfg.ProxyMode == "direct" {
 		shouldProxy = false
 	} else if cfg.ProxyMode == "pac" {
-		// GeoIP 匹配逻辑
 		checkIP := destIP
 
-		// 如果是域名，需要解析 IP 来判断 (PAC 标准行为)
 		if checkIP == nil {
 			host, _, _ := net.SplitHostPort(destAddrStr)
 			// 使用本地 DNS 解析，设置超时
@@ -99,10 +92,9 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 		}
 
 		if checkIP != nil {
-			// 如果在 CN 列表内 -> 直连 (Don't Proxy)
 			if geoMgr.Contains(checkIP) {
-				shouldProxy = false
-				log.Printf("[PAC] %s (%s) -> DIRECT (CN Rule)", destAddrStr, checkIP)
+				shouldProxy = false // CN IP 直连
+				log.Printf("[PAC] %s (%s) -> DIRECT", destAddrStr, checkIP)
 			} else {
 				shouldProxy = true
 				log.Printf("[PAC] %s (%s) -> PROXY", destAddrStr, checkIP)
@@ -116,9 +108,7 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 
 	// 4. 建立连接
 	var targetConn net.Conn
-
 	if shouldProxy {
-		// ==== 走代理通道 ====
 		// 连接 Sudoku Server
 		rawRemote, err := net.DialTimeout("tcp", cfg.ServerAddress, 5*time.Second)
 		if err != nil {
@@ -128,14 +118,12 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 			return
 		}
 
-		// 包装连接
 		sConn := sudoku.NewConn(rawRemote, table, cfg.PaddingMin, cfg.PaddingMax, false)
 		cConn, err := crypto.NewAEADConn(sConn, cfg.Key, cfg.AEAD)
 		if err != nil {
 			rawRemote.Close()
 			return
 		}
-
 		// 4.1 发送 Sudoku 握手
 		handshake := make([]byte, 16)
 		binary.BigEndian.PutUint64(handshake[:8], uint64(time.Now().Unix()))
@@ -144,13 +132,11 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 			cConn.Close()
 			return
 		}
-
 		// 4.2 发送目标地址给服务端
 		if err := protocol.WriteAddress(cConn, destAddrStr); err != nil {
 			cConn.Close()
 			return
 		}
-
 		targetConn = cConn
 	} else {
 		// ==== 直连 ====
@@ -163,19 +149,15 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 	}
 
 	// 5. 发送 SOCKS5 成功响应给本地客户端
-	// 无论直连还是代理，此时连接已建立
-	// 响应 0x00 (Succeeded), BIND.ADDR 0.0.0.0:0
 	conn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 
 	// 6. 双向转发
-	// 使用 io.CopyBuffer 减少内存分配
 	go func() {
 		buf := make([]byte, 32*1024)
 		io.CopyBuffer(targetConn, conn, buf)
 		targetConn.Close()
 		conn.Close()
 	}()
-
 	buf2 := make([]byte, 32*1024)
 	io.CopyBuffer(conn, targetConn, buf2)
 	conn.Close()

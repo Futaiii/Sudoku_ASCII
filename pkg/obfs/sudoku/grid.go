@@ -1,3 +1,4 @@
+// pkg/obfs/sudoku/grid.go
 package sudoku
 
 // Grid represents a 4x4 sudoku grid
