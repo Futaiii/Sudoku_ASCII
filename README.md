@@ -1,62 +1,60 @@
-<p align="center">
-  <img src="./assets/logo-cute.svg" width="100%">
-</p>
-
-# Sudoku ASCII
-
-[![构建状态](https://img.shields.io/github/actions/workflow/status/Futaiii/Sudoku_ASCII/.github/workflows/release.yml?branch=main&style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/actions)
-[![最新版本](https://img.shields.io/github/v/release/Futaiii/Sudoku_ASCII?style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/releases)
-[![许可证](https://img.shields.io/github/license/Futaiii/Sudoku_ASCII?style=for-the-badge)](./LICENSE)
-
-Sudoku ASCII 是一个基于组合数学的流量混淆协议。它通过将任意数据流映射为生成的 4x4 数独谜题提示，将加密流量伪装成普通的逻辑游戏数据。
-
-该项目的核心理念是利用数独网格的数学特性，实现 O(1) 复杂度的快速编码与解码，同时提供抗主动探测能力。
-
-## 核心特性
-
-### 数独隐写算法
-不同于传统的随机噪音混淆，本协议通过预计算的数独终盘置换表，将每一个字节的数据转换为数独盘面上的一组"提示数"。
-*   **动态填充**: 在任意时刻任意位置填充任意长度非数据字节，隐藏协议特征。
-*   **数据隐藏**: 填充字节的分布特征与明文字节分布特征基本一致(65%~100%*的ASCII占比)，可避免通过数据分布特征识别明文。
-*   **低信息熵**: 整体字节汉明重量约在3.0*（低熵模式下）,低于GFW Report提到的3.4~4.6。 
-*   **高效转换**: 利用空间换时间策略，初始化时生成映射表，运行时仅需查表操作。
-
----
-
-> *注：100%的ASCII占比须在ASCII优先模式下，ENTROPY优先模式下为65%。 3.0的汉明重量须在ENTROPY优先模式下，ASCII优先模式下为4.0.
-
-> 目前没有任何证据表明两种优先策略的任何一种有明显指纹。
-
----
-
-### 安全与加密
-在混淆层之下，协议可选的采用 AEAD（关联数据的认证加密）保护数据完整性与机密性。
-*   **算法支持**: AES-128-GCM 或 ChaCha20-Poly1305。
-*   **防重放**: 握手阶段包含时间戳校验，有效防止重放攻击。
-
-### 防御性回落 (Fallback)
-当服务器检测到非法的握手请求、超时的连接或格式错误的数据包时，不会直接断开连接（这通常是识别代理服务器的特征），而是将连接无缝转发至指定的诱饵地址（如 Nginx 或 Apache 服务器）。探测者只会看到一个普通的网页服务器响应。
-
-### 缺点（TODO）
-1.  **数据包格式**: 仅支持 TCP 数据包。
-2.  **带宽利用率**: 低于30%，推荐线路好的或者带宽高的用户使用，另外推荐机场主使用，可以有效增加用户的流量。
-3.  **客户端代理**: 仅支持socks5。
-4.  **协议普及度**: 暂无安卓/图形化，以及其他内核兼容。
 
 <p align="center">
   <img src="./assets/logo-brutal.svg" width="100%">
 </p>
 
+# Sudoku ASCII
 
-## 快速开始
+[![Build Status](https://img.shields.io/github/actions/workflow/status/Futaiii/Sudoku_ASCII/.github/workflows/release.yml?branch=main&style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/actions)
+[![Latest Release](https://img.shields.io/github/v/release/Futaiii/Sudoku_ASCII?style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/releases)
+[![License](https://img.shields.io/github/license/Futaiii/Sudoku_ASCII?style=for-the-badge)](./LICENSE)
 
-### 编译
+[中文文档](https://github.com/Futaiii/Sudoku_ASCII/blob/main/README.zh_CN.md)
+
+Sudoku ASCII is a traffic obfuscation protocol based on combinatorial mathematics. It disguises arbitrary data streams as generated 4×4 Sudoku puzzle clues, making encrypted traffic appear as ordinary logic‑game data.
+
+The core idea of the project is to exploit the mathematical properties of Sudoku grids to achieve **O(1)**‑complexity fast encoding and decoding while providing resistance to active probing.
+
+## Core Features
+
+### Sudoku Steganography Algorithm
+Unlike traditional random‑noise obfuscation, this protocol uses a pre‑computed Sudoku solution permutation table to convert each byte of data into a set of “clue numbers” on a Sudoku board.
+
+- **Dynamic Padding**: At any moment, any length of non‑data bytes can be inserted at arbitrary positions, hiding protocol fingerprints.
+- **Data Hiding**: The distribution of padding bytes closely matches that of plaintext bytes (65 %–100 % ASCII proportion), preventing identification via statistical analysis.
+- **Low Information Entropy**: Overall byte Hamming weight is about **3.0** (in low‑entropy mode), lower than the 3.4–4.6 reported by GFW Report.
+- **Efficient Mapping**: Uses a space‑for‑time strategy; the mapping table is generated once at initialization, and runtime operations are simple table lookups.
+
+> **Note:** 100 % ASCII proportion applies to the ASCII‑preferred mode; the ENTROPY‑preferred mode yields 65 %. A Hamming weight of 3.0 applies to the ENTROPY‑preferred mode; the ASCII‑preferred mode yields 4.0.  
+> Currently there is no evidence that either priority strategy leaves a noticeable fingerprint.
+
+### Security & Encryption
+Below the obfuscation layer, the protocol optionally employs AEAD (Authenticated Encryption with Associated Data) to protect integrity and confidentiality.
+
+- **Algorithm Support**: AES‑128‑GCM or ChaCha20‑Poly1305.
+- **Replay Protection**: Handshake includes a timestamp check to thwart replay attacks.
+
+### Defensive Fallback
+When the server detects an illegal handshake, a timed‑out connection, or malformed packets, it does **not** terminate the connection (a common proxy‑detection sign). Instead, it silently forwards the connection to a designated decoy address (e.g., an Nginx or Apache server). The probe only sees a normal web‑server response.
+
+### Limitations (TODO)
+
+1. **Packet Format**: Supports TCP packets only.  
+2. **Bandwidth Utilization**: Below 30 %; best for users with high‑speed or high‑bandwidth connections, or for “airport” operators to increase traffic.  
+3. **Client Proxy**: SOCKS5 only.  
+4. **Protocol Adoption**: No Android/GUI clients yet, and limited kernel compatibility.
+
+
+
+## Quick Start
+
+### Build
 
 ```bash
 go build -o sudoku cmd/sudoku-tunnel/main.go
 ```
 
-### 服务端配置 (config.json)
+### Server Configuration (`config.json`)
 
 ```json
 {
@@ -73,39 +71,39 @@ go build -o sudoku cmd/sudoku-tunnel/main.go
 }
 ```
 
-### 客户端配置
+### Client Configuration
 
-将 `mode` 改为 `client`，并设置 `server_address` 为服务端 IP，将`local_port` 设置为代理监听端口，添加`geoip_url`使用`configs/config.json`的模板填充即可。
+Change `"mode"` to `"client"`, set `"server_address"` to the server’s IP, set `"local_port"` to the proxy listening port, and add `geoip_url` using the template from `configs/config.json`.
 
-### 运行
-将 `config.json` 放置在sudoku同一目录下，并运行
+### Run
+
+Place `config.json` in the same directory as the `sudoku` binary and execute:
+
 ```bash
 ./sudoku
 ```
 
-## 协议流程
+## Protocol Flow
 
-1.  **初始化**: 客户端与服务端根据预共享密钥（Key）生成相同的数独映射表。
-2.  **握手**: 客户端发送加密的时间戳与随机数。
-3.  **传输**: 数据 -> AEAD 加密 -> 切片 -> 映射为数独提示 -> 添加填充 -> 发送。
-4.  **接收**: 接收数据 -> 过滤填充 -> 还原数独提示 -> 查表解码 -> AEAD 解密。
+1. **Initialization**: Client and server generate identical Sudoku mapping tables from the pre‑shared key.
+2. **Handshake**: Client sends an encrypted timestamp and random nonce.
+3. **Transmission**: Data → AEAD encrypt → slice → map to Sudoku clues → add padding → send.
+4. **Reception**: Receive data → filter padding → restore Sudoku clues → table lookup decode → AEAD decrypt.
 
 ---
 
-
 ## Disclaimer
-> [!NOTE]\
-> This software is for educational and research purposes only. Users are responsible for complying with local network regulations.
+> **Note**  
+> This software is for educational and research purposes only. Users must comply with local network regulations.
 
-## 鸣谢
+## Acknowledgments
 
-- [链接1](https://gfw.report/publications/usenixsecurity23/zh/)
-- [链接2](https://github.com/enfein/mieru/issues/8)
-- [链接3](https://github.com/zhaohuabing/lightsocks)
-- [链接4](https://imciel.com/2020/08/27/create-custom-tunnel/)
-- [链接5](https://oeis.org/A109252)
-- [链接6](https://pi.math.cornell.edu/~mec/Summer2009/Mahmood/Four.html)
-
+- [Link 1](https://gfw.report/publications/usenixsecurity23/zh/)
+- [Link 2](https://github.com/enfein/mieru/issues/8)
+- [Link 3](https://github.com/zhaohuabing/lightsocks)
+- [Link 4](https://imciel.com/2020/08/27/create-custom-tunnel/)
+- [Link 5](https://oeis.org/A109252)
+- [Link 6](https://pi.math.cornell.edu/~mec/Summer2009/Mahmood/Four.html)
 
 ## Star History
 
