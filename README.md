@@ -8,7 +8,7 @@ A Sudoku‑based proxy protocol that ushered in the era of clear‑text / low‑
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/Futaiii/Sudoku_ASCII/.github/workflows/release.yml?branch=main&style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/actions)
 [![Latest Release](https://img.shields.io/github/v/release/Futaiii/Sudoku_ASCII?style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/releases)
-[![License](https://img.shields.io/github/license/Futaiii/Sudoku_ASCII?style=for-the-badge)](./LICENSE)
+[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
 [中文文档](https://github.com/Futaiii/Sudoku_ASCII/blob/main/README.zh_CN.md)
 

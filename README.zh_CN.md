@@ -7,7 +7,7 @@
 
 [![构建状态](https://img.shields.io/github/actions/workflow/status/Futaiii/Sudoku_ASCII/.github/workflows/release.yml?branch=main&style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/actions)
 [![最新版本](https://img.shields.io/github/v/release/Futaiii/Sudoku_ASCII?style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/releases)
-[![许可证](https://img.shields.io/github/license/Futaiii/Sudoku_ASCII?style=for-the-badge)](./LICENSE)
+[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
 Sudoku ASCII 是一个基于组合数学的流量混淆协议。它通过将任意数据流映射为生成的 4x4 数独谜题提示，将加密流量伪装成普通的逻辑游戏数据。
 

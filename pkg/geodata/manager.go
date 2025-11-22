@@ -2,8 +2,9 @@
 package geodata
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/binary"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // IPRange 表示一个 IP 区间 [Start, End]
@@ -25,6 +28,11 @@ type Manager struct {
 	domainSuffix map[string]struct{} // 后缀匹配 DOMAIN-SUFFIX
 	mu           sync.RWMutex
 	urls         []string
+}
+
+// RuleSet 用于解析 YAML 格式的 payload
+type RuleSet struct {
+	Payload []string `yaml:"payload"`
 }
 
 var instance *Manager
@@ -76,37 +84,72 @@ func (m *Manager) downloadAndParse(url string, ipRanges *[]IPRange, exact, suffi
 	}
 	defer resp.Body.Close()
 
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
-			continue
+	// 读取全部内容
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[GeoData] Failed to read body from %s: %v", url, err)
+		return
+	}
+
+	// 1. 尝试作为 YAML 解析
+	var rs RuleSet
+	if err := yaml.Unmarshal(body, &rs); err == nil && len(rs.Payload) > 0 {
+		for _, rule := range rs.Payload {
+			m.parseRule(rule, ipRanges, exact, suffix)
 		}
+		return
+	}
 
-		// 1. 尝试解析 Clash 格式: TYPE,VALUE,...
-		parts := strings.Split(line, ",")
-		if len(parts) >= 2 {
-			ruleType := strings.TrimSpace(strings.ToUpper(parts[0]))
-			ruleValue := strings.TrimSpace(parts[1])
-
-			switch ruleType {
-			case "DOMAIN":
-				exact[ruleValue] = struct{}{}
-			case "DOMAIN-SUFFIX":
-				suffix[ruleValue] = struct{}{}
-			case "IP-CIDR", "IP-CIDR6":
-				// 处理 IP-CIDR,1.2.3.4/24
-				parseIPLine(ruleValue, ipRanges)
-			}
-			continue
+	// 2. 兼容模式：如果 YAML 解析失败（例如是纯文本列表），则按行解析
+	// 这能兼容一些纯文本的 .list 文件，同时通过上面的逻辑支持统一的 YAML payload
+	scanner := bytes.NewBuffer(body)
+	for {
+		line, err := scanner.ReadString('\n')
+		if err != nil && err != io.EOF {
+			break
 		}
-
-		// 2. 尝试解析纯 CIDR 或 IP (兼容旧格式)
-		parseIPLine(line, ipRanges)
+		m.parseRule(line, ipRanges, exact, suffix)
+		if err == io.EOF {
+			break
+		}
 	}
 }
 
+// parseRule 统一处理单行规则字符串
+func (m *Manager) parseRule(line string, ipRanges *[]IPRange, exact, suffix map[string]struct{}) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
+		return
+	}
+
+	// 1. 尝试解析 Clash 格式: TYPE,VALUE,...
+	// YAML 解析后，不需要手动去引号，yaml 库已处理。
+	// 格式如: DOMAIN,baidu.com 或 IP-CIDR,1.2.3.4/24,no-resolve
+	parts := strings.Split(line, ",")
+	if len(parts) >= 2 {
+		ruleType := strings.TrimSpace(strings.ToUpper(parts[0]))
+		ruleValue := strings.TrimSpace(parts[1])
+
+		switch ruleType {
+		case "DOMAIN":
+			exact[ruleValue] = struct{}{}
+		case "DOMAIN-SUFFIX":
+			suffix[ruleValue] = struct{}{}
+		case "IP-CIDR", "IP-CIDR6":
+			// 处理 IP-CIDR,1.2.3.4/24
+			parseIPLine(ruleValue, ipRanges)
+		}
+		return
+	}
+
+	// 2. 尝试解析纯 CIDR 或 IP
+	parseIPLine(line, ipRanges)
+}
+
 func parseIPLine(line string, list *[]IPRange) {
+	// 移除可能的引号
+	line = strings.Trim(line, "'\"")
+
 	_, ipNet, err := net.ParseCIDR(line)
 	if err != nil {
 		// 尝试作为单 IP
