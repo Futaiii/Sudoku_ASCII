@@ -47,6 +47,8 @@ func Load(path string) (*Config, error) {
 	if len(cfg.RuleURLs) > 0 && (cfg.RuleURLs[0] == "global" || cfg.RuleURLs[0] == "direct") {
 		cfg.ProxyMode = cfg.RuleURLs[0]
 		cfg.RuleURLs = nil
+	} else if len(cfg.RuleURLs) > 0 {
+		cfg.ProxyMode = "pac"
 	} else {
 		if cfg.ProxyMode == "" {
 			cfg.ProxyMode = "global" // 默认为全局代理模式
