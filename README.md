@@ -1,6 +1,7 @@
 
 <p align="center">
   <img src="./assets/logo-brutal.svg" width="100%">
+A Sudoku‑based proxy protocol that ushered in the era of clear‑text / low‑entropy proxies.
 </p>
 
 # Sudoku ASCII
@@ -66,14 +67,14 @@ go build -o sudoku cmd/sudoku-tunnel/main.go
   "aead": "chacha20-poly1305",
   "suspicious_action": "fallback",
   "ascii": "prefer_entropy",
-  "padding_min": 10,
-  "padding_max": 15
+  "padding_min": 2,
+  "padding_max": 7
 }
 ```
 
 ### Client Configuration
 
-Change `"mode"` to `"client"`, set `"server_address"` to the server’s IP, set `"local_port"` to the proxy listening port, and add `rule_urls` using the template from `configs/config.json`.
+Change `"mode"` to `"client"`, set `"server_address"` to the server’s IP, set `"local_port"` to the proxy listening port, and add `"rule_urls"` using the template from `configs/config.json`.
 
 ### Run
 

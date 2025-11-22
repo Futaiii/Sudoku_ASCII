@@ -20,7 +20,6 @@ type Config struct {
 	RuleURLs         []string `json:"rule_urls"`  // 留空则使用默认，支持 "global", "direct" 关键字
 	ProxyMode        string   `json:"proxy_mode"` // 运行时状态，非JSON字段，由Load解析逻辑填充
 	ASCII            string   `json:"ascii"`      // "prefer_entropy" (默认): 旧模式, 低熵, 二进制混淆"，prefer_ascii": 新模式, 纯ASCII字符，高熵
-	LegacyGeoIPURL   string   `json:"geoip_url,omitempty"`
 }
 
 func Load(path string) (*Config, error) {
@@ -50,20 +49,7 @@ func Load(path string) (*Config, error) {
 		cfg.RuleURLs = nil
 	} else {
 		if cfg.ProxyMode == "" {
-			cfg.ProxyMode = "pac" // 默认为规则模式
-		}
-
-		// 如果 RuleURLs 为空，尝试使用旧字段或默认值
-		if len(cfg.RuleURLs) == 0 {
-			if cfg.LegacyGeoIPURL != "" && cfg.LegacyGeoIPURL != "global" && cfg.LegacyGeoIPURL != "direct" {
-				cfg.RuleURLs = []string{cfg.LegacyGeoIPURL}
-			} else {
-				// 默认规则列表
-				cfg.RuleURLs = []string{
-					"https://gh-proxy.org/https://raw.githubusercontent.com/fernvenue/chn-cidr-list/master/ipv4.txt",
-					"https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Clash/China/China.list",
-				}
-			}
+			cfg.ProxyMode = "global" // 默认为全局代理模式
 		}
 	}
 

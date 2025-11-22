@@ -40,10 +40,10 @@ func NewTable(key string, mode string) *Table {
 		}
 	} else {
 		// === Entropy Mode (Legacy) ===
-		// Padding: 0x80 (1000xxxx) & 0x10 (0001xxxx)
+		// Padding: 0x80 (10000xxx) & 0x10 (00010xxx)
 		// Payload: Avoids bits 7 and 4 being strictly defined like padding
-		t.PaddingPool = make([]byte, 0, 32)
-		for i := 0; i < 16; i++ {
+		t.PaddingPool = make([]byte, 0, 16)
+		for i := 0; i < 8; i++ {
 			t.PaddingPool = append(t.PaddingPool, byte(0x80+i))
 			t.PaddingPool = append(t.PaddingPool, byte(0x10+i))
 		}
