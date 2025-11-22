@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and Release
+  build:
+    name: Build
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -35,7 +35,7 @@ jobs:
           - goos: darwin
             goarch: arm64
             asset_name: sudoku-darwin-arm64
-          # FreeBSD (Common for routers)
+          # FreeBSD
           - goos: freebsd
             goarch: amd64
             asset_name: sudoku-freebsd-amd64
@@ -64,7 +64,6 @@ jobs:
           BINARY_NAME=sudoku${{ matrix.extension }}
           ASSET_NAME=${{ matrix.asset_name }}
           
-          # Copy config example for user convenience
           cp configs/config.json config.json
           
           if [ "${{ matrix.goos }}" = "windows" ]; then
@@ -75,10 +74,29 @@ jobs:
             echo "ARCHIVE_NAME=${ASSET_NAME}.tar.gz" >> $GITHUB_ENV
           fi
 
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: ${{ env.ARCHIVE_NAME }}
+          name: artifacts-${{ matrix.asset_name }}
+          path: ${{ env.ARCHIVE_NAME }}
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifacts-*
+          merge-multiple: true
+          path: dist
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
