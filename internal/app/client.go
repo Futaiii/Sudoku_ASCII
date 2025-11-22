@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Futaiii/Sudoku_ASCII/internal/config"
+	"github.com/Futaiii/Sudoku_ASCII/internal/hybrid"
 	"github.com/Futaiii/Sudoku_ASCII/internal/protocol"
 	"github.com/Futaiii/Sudoku_ASCII/pkg/crypto"
 	"github.com/Futaiii/Sudoku_ASCII/pkg/geodata"
@@ -37,6 +38,11 @@ func (c *PeekConn) Read(p []byte) (n int, err error) {
 }
 
 func RunClient(cfg *config.Config, table *sudoku.Table) {
+	mgr := hybrid.GetInstance(cfg)
+	if err := mgr.StartMieruClient(); err != nil {
+		log.Fatalf("Failed to start Mieru Client: %v", err)
+	}
+
 	var geoMgr *geodata.Manager
 	if cfg.ProxyMode == "pac" {
 		geoMgr = geodata.GetInstance(cfg.RuleURLs)
@@ -54,11 +60,11 @@ func RunClient(cfg *config.Config, table *sudoku.Table) {
 		if err != nil {
 			continue
 		}
-		go handleMixedConn(c, cfg, table, geoMgr)
+		go handleMixedConn(c, cfg, table, geoMgr, mgr)
 	}
 }
 
-func handleMixedConn(c net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager) {
+func handleMixedConn(c net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager, mgr *hybrid.Manager) {
 	// peek第一个字节以确定协议
 	buf := make([]byte, 1)
 	if _, err := io.ReadFull(c, buf); err != nil {
@@ -71,16 +77,16 @@ func handleMixedConn(c net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr
 
 	if buf[0] == 0x05 {
 		// SOCKS5
-		handleClientSocks5(pConn, cfg, table, geoMgr)
+		handleClientSocks5(pConn, cfg, table, geoMgr, mgr)
 	} else {
 		// 假设是 HTTP/HTTPS
-		handleHTTP(pConn, cfg, table, geoMgr)
+		handleHTTP(pConn, cfg, table, geoMgr, mgr)
 	}
 }
 
 // ==== SOCKS5 Handler ====
 
-func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager) {
+func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager, mgr *hybrid.Manager) {
 	defer conn.Close()
 
 	// 1. SOCKS5 握手
@@ -112,7 +118,7 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 	}
 
 	// 3. 路由与连接
-	targetConn, success := dialTarget(destAddrStr, destIP, cfg, table, geoMgr)
+	targetConn, success := dialTarget(destAddrStr, destIP, cfg, table, geoMgr, mgr)
 	if !success {
 		// SOCKS5 Error
 		conn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
@@ -128,7 +134,7 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 
 // ==== HTTP Handler ====
 
-func handleHTTP(conn net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager) {
+func handleHTTP(conn net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager, mgr *hybrid.Manager) {
 	defer conn.Close()
 
 	req, err := http.ReadRequest(bufio.NewReader(conn))
@@ -151,7 +157,7 @@ func handleHTTP(conn net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *
 	destIP := net.ParseIP(hostName)
 
 	// 路由决策与连接
-	targetConn, success := dialTarget(host, destIP, cfg, table, geoMgr)
+	targetConn, success := dialTarget(host, destIP, cfg, table, geoMgr, mgr)
 	if !success {
 		conn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 		return
@@ -179,7 +185,7 @@ func handleHTTP(conn net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *
 
 // ==== Common Logic ====
 
-func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager) (net.Conn, bool) {
+func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager, mgr *hybrid.Manager) (net.Conn, bool) {
 	shouldProxy := true
 
 	if cfg.ProxyMode == "global" {
@@ -217,7 +223,7 @@ func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *su
 	}
 
 	if shouldProxy {
-		// 通过 Sudoku 代理连接
+		// 1. Sudoku Dial (Uplink)
 		rawRemote, err := net.DialTimeout("tcp", cfg.ServerAddress, 5*time.Second)
 		if err != nil {
 			log.Printf("[Proxy] Dial Server Failed: %v", err)
@@ -231,20 +237,90 @@ func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *su
 			return nil, false
 		}
 
-		// 握手
-		handshake := make([]byte, 16)
+		// 2. 握手逻辑
+		handshake := make([]byte, 16+1+32) // Expand buffer for potential UUID
 		binary.BigEndian.PutUint64(handshake[:8], uint64(time.Now().Unix()))
-		rand.Read(handshake[8:])
-		if _, err := cConn.Write(handshake); err != nil {
+		rand.Read(handshake[8:16])
+
+		var splitUUID string
+
+		if cfg.EnableMieru {
+			// 标记位：0x01 = Standard, 0x02 = Split Tunnel
+			// 这里我们不仅需要发时间戳，还需要发 UUID
+			// 为了兼容性，我们在标准握手后由协议层约定
+			// 让我们稍微修改一下协议：在写完 Address 之前
+		}
+
+		if _, err := cConn.Write(handshake[:16]); err != nil {
 			cConn.Close()
 			return nil, false
 		}
 
-		if err := protocol.WriteAddress(cConn, destAddrStr); err != nil {
-			cConn.Close()
-			return nil, false
+		// *** Split Mode Logic ***
+		if cfg.EnableMieru {
+			splitUUID = hybrid.GenerateUUID()
+			// 发送 Split 标志 (0xFF) + UUID
+			// 这是自定义扩展协议
+			magic := []byte{0xFF}
+			uuidBytes := []byte(splitUUID) // hex string usually 32 bytes
+			lenByte := byte(len(uuidBytes))
+
+			// 发送 [Magic][Len][UUID]
+			cConn.Write(magic)
+			cConn.Write([]byte{lenByte})
+			cConn.Write(uuidBytes)
+
+			// 3. 并行建立 Mieru Downlink
+			// 注意：这里会阻塞等待，直到 Mieru 建立完成。
+			// 实际生产中建议用 errgroup 并行，但这里为了逻辑清晰顺序写
+
+			mConn, err := mgr.DialMieruForDownlink(splitUUID)
+			if err != nil {
+				log.Printf("[Split] Failed to dial Mieru: %v", err)
+				cConn.Close()
+				return nil, false
+			}
+
+			// 4. 组合连接
+			// Sudoku (cConn) 用于写 (上行)
+			// Mieru (mConn) 用于读 (下行)
+			// 但注意：我们之前写入了 "BIND"，Mieru Conn 可能包含服务端的握手响应。
+			// 服务端在配对成功后，应该直接开始转发数据。
+
+			// 创建混合连接对象
+			hybridConn := &hybrid.SplitConn{
+				Conn:   cConn, // 基础接口用 Sudoku 的
+				Writer: cConn,
+				Reader: mConn,
+				CloseFn: func() error {
+					e1 := cConn.Close()
+					e2 := mConn.Close()
+					if e1 != nil {
+						return e1
+					}
+					return e2
+				},
+			}
+
+			// 5. 发送目标地址 (通过 Sudoku 上行发送)
+			if err := protocol.WriteAddress(hybridConn, destAddrStr); err != nil {
+				hybridConn.Close()
+				return nil, false
+			}
+
+			return hybridConn, true
+
+		} else {
+			// 标准模式
+			// 发送 0x00 表示非 Split 模式，或者如果服务端不强制检查，则不需要
+			// 为了兼容旧版 Server，如果旧版 Server 读到 Address 的第一个字节不是 0xFF 而是 AddrType (1,3,4)，则正常
+			// 0xFF 不是有效的 AddrType，所以是兼容的。
+			if err := protocol.WriteAddress(cConn, destAddrStr); err != nil {
+				cConn.Close()
+				return nil, false
+			}
+			return cConn, true
 		}
-		return cConn, true
 	} else {
 		// 直连
 		dConn, err := net.DialTimeout("tcp", destAddrStr, 5*time.Second)
