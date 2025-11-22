@@ -1,0 +1,202 @@
+// pkg/geodata/manager.go
+package geodata
+
+import (
+	"bufio"
+	"encoding/binary"
+	"log"
+	"net"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+)
+
+// IPRange 表示一个 IP 区间 [Start, End]
+type IPRange struct {
+	Start uint32
+	End   uint32
+}
+
+type Manager struct {
+	ipRanges     []IPRange
+	domainExact  map[string]struct{} // 精确匹配 DOMAIN
+	domainSuffix map[string]struct{} // 后缀匹配 DOMAIN-SUFFIX
+	mu           sync.RWMutex
+	urls         []string
+}
+
+var instance *Manager
+var once sync.Once
+
+// GetInstance 单例模式
+func GetInstance(urls []string) *Manager {
+	once.Do(func() {
+		instance = &Manager{
+			urls:         urls,
+			domainExact:  make(map[string]struct{}),
+			domainSuffix: make(map[string]struct{}),
+		}
+		go instance.Update()
+	})
+	return instance
+}
+
+func (m *Manager) Update() {
+	log.Printf("[GeoData] Updating rules from %d sources...", len(m.urls))
+
+	var tempRanges []IPRange
+	tempExact := make(map[string]struct{})
+	tempSuffix := make(map[string]struct{})
+
+	for _, u := range m.urls {
+		m.downloadAndParse(u, &tempRanges, tempExact, tempSuffix)
+	}
+
+	// 优化 IP 区间
+	mergedIPs := mergeRanges(tempRanges)
+
+	m.mu.Lock()
+	m.ipRanges = mergedIPs
+	m.domainExact = tempExact
+	m.domainSuffix = tempSuffix
+	m.mu.Unlock()
+
+	log.Printf("[GeoData] Rules Updated: %d IP Ranges, %d Domains, %d Suffixes",
+		len(mergedIPs), len(tempExact), len(tempSuffix))
+}
+
+func (m *Manager) downloadAndParse(url string, ipRanges *[]IPRange, exact, suffix map[string]struct{}) {
+	client := http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("[GeoData] Failed to download %s: %v", url, err)
+		return
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
+			continue
+		}
+
+		// 1. 尝试解析 Clash 格式: TYPE,VALUE,...
+		parts := strings.Split(line, ",")
+		if len(parts) >= 2 {
+			ruleType := strings.TrimSpace(strings.ToUpper(parts[0]))
+			ruleValue := strings.TrimSpace(parts[1])
+
+			switch ruleType {
+			case "DOMAIN":
+				exact[ruleValue] = struct{}{}
+			case "DOMAIN-SUFFIX":
+				suffix[ruleValue] = struct{}{}
+			case "IP-CIDR", "IP-CIDR6":
+				// 处理 IP-CIDR,1.2.3.4/24
+				parseIPLine(ruleValue, ipRanges)
+			}
+			continue
+		}
+
+		// 2. 尝试解析纯 CIDR 或 IP (兼容旧格式)
+		parseIPLine(line, ipRanges)
+	}
+}
+
+func parseIPLine(line string, list *[]IPRange) {
+	_, ipNet, err := net.ParseCIDR(line)
+	if err != nil {
+		// 尝试作为单 IP
+		ip := net.ParseIP(line)
+		if ip != nil {
+			val := ipToUint32(ip)
+			*list = append(*list, IPRange{Start: val, End: val})
+		}
+		return
+	}
+	start := ipToUint32(ipNet.IP)
+	mask := binary.BigEndian.Uint32(ipNet.Mask)
+	end := start | (^mask)
+	*list = append(*list, IPRange{Start: start, End: end})
+}
+
+// IsCN 检查目标是否匹配 CN 规则 (域名优先，其次 IP)
+// host 可以是域名或 IP 字符串
+func (m *Manager) IsCN(host string, ip net.IP) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// 1. 域名匹配
+	if ip == nil || (len(host) > 0 && host != ip.String()) {
+		// 这是一个域名
+		domain := strings.TrimSuffix(host, ".") // 移除末尾的点
+
+		// 精确匹配
+		if _, ok := m.domainExact[domain]; ok {
+			return true
+		}
+
+		// 后缀匹配
+		// 策略：逐级向上检查。例如 www.baidu.com -> 检查 www.baidu.com, baidu.com, com
+		parts := strings.Split(domain, ".")
+		for i := 0; i < len(parts); i++ {
+			suffix := strings.Join(parts[i:], ".")
+			if _, ok := m.domainSuffix[suffix]; ok {
+				return true
+			}
+		}
+	}
+
+	// 2. IP 匹配
+	if ip != nil {
+		ip4 := ip.To4()
+		if ip4 == nil {
+			return false // 不支持 IPv6 直连规则，默认代理
+		}
+		val := ipToUint32(ip4)
+
+		idx := sort.Search(len(m.ipRanges), func(i int) bool {
+			return m.ipRanges[i].End >= val
+		})
+
+		if idx < len(m.ipRanges) && m.ipRanges[idx].Start <= val {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ipToUint32(ip net.IP) uint32 {
+	if len(ip) == 16 {
+		return binary.BigEndian.Uint32(ip[12:16])
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+
+func mergeRanges(ranges []IPRange) []IPRange {
+	if len(ranges) == 0 {
+		return nil
+	}
+	sort.Slice(ranges, func(i, j int) bool {
+		return ranges[i].Start < ranges[j].Start
+	})
+	var result []IPRange
+	current := ranges[0]
+	for i := 1; i < len(ranges); i++ {
+		next := ranges[i]
+		if current.End >= next.Start-1 {
+			if next.End > current.End {
+				current.End = next.End
+			}
+		} else {
+			result = append(result, current)
+			current = next
+		}
+	}
+	result = append(result, current)
+	return result
+}
