@@ -54,6 +54,8 @@ Since the stream encapsulation of the sudoku protocol leads to increased packet 
 ```
 **Explanation:** When `"enable_mieru"` is set to `true`, uplink/downlink separation is enabled; when set to `false`, the `"mieru_config"` field can be ignored. Within the `"mieru_config"` field, `port` is mandatory (specifying the downstream port), while other configuration items can be omitted.
 
+**Note**: It is currently uncertain whether the traffic characteristics resulting from this configuration method will be subject to censorship; it is therefore listed as an experimental feature.
+
 ### Security & Encryption
 Beneath the obfuscation layer, the protocol optionally uses AEAD to protect data integrity and confidentiality.
 *   **Algorithm Support**: AES-128-GCM or ChaCha20-Poly1305.
