@@ -21,7 +21,7 @@ import (
 	"github.com/Futaiii/Sudoku_ASCII/pkg/obfs/sudoku"
 )
 
-// PeekConn 允许查看第一个字节而不消耗它
+// PeekConn 允许查看第一个字节不消耗它
 type PeekConn struct {
 	net.Conn
 	peeked []byte
@@ -59,14 +59,14 @@ func RunClient(cfg *config.Config, table *sudoku.Table) {
 }
 
 func handleMixedConn(c net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *geodata.Manager) {
-	// 读取第一个字节以确定协议
+	// peek第一个字节以确定协议
 	buf := make([]byte, 1)
 	if _, err := io.ReadFull(c, buf); err != nil {
 		c.Close()
 		return
 	}
 
-	// 包装连接，把读取的字节放回去
+	// 把读取的字节放回去
 	pConn := &PeekConn{Conn: c, peeked: buf}
 
 	if buf[0] == 0x05 {
@@ -84,12 +84,10 @@ func handleClientSocks5(conn net.Conn, cfg *config.Config, table *sudoku.Table, 
 	defer conn.Close()
 
 	// 1. SOCKS5 握手
-	// 注意：conn 已经是 PeekConn，可以直接当普通 Conn 用
 	buf := make([]byte, 262)
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil {
 		return
 	}
-	// buf[0] 必须是 0x05，我们已经在 mixed 检查过了，但为了严谨可以再查
 	nMethods := int(buf[1])
 	if _, err := io.ReadFull(conn, buf[:nMethods]); err != nil {
 		return
@@ -164,19 +162,8 @@ func handleHTTP(conn net.Conn, cfg *config.Config, table *sudoku.Table, geoMgr *
 		conn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 		startPipe(conn, targetConn)
 	} else {
-		// HTTP Proxy: 发送原始请求到目标 (需要处理 RequestURI)
-		// 简单处理：直接把读取到的 Request 序列化发给目标
-		// 注意：标准 HTTP 代理请求是 GET http://site.com/path，发给目标服务器应该是 GET /path
-		// 但很多服务器也接受完整 URI。为了稳健，这里做简化透传。
-
-		// 将请求写入目标连接
-		// 对于 HTTP 代理，我们需要重构请求或直接转发字节。
-		// 由于 http.ReadRequest 可能消耗了部分 buffer，最稳健的方法是
-		// 将 req 重新 write 到 targetConn。
-		// 注意：需要将 RequestURI 变为相对路径，并移除 Proxy-Connection 头
-
-		req.RequestURI = "" // Client.Do or Write needs this empty usually, but for raw proxying...
-		// 简单的做法：如果是绝对路径 http://... 转换为相对路径
+		req.RequestURI = ""
+		// 如果是绝对路径转换为相对路径
 		if req.URL.Scheme != "" {
 			req.URL.Scheme = ""
 			req.URL.Host = ""

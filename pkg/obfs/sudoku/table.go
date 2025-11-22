@@ -142,7 +142,7 @@ func NewTable(key string, mode string) *Table {
 
 func packHintsToKey(hints [4]byte) uint32 {
 	// 注意：对于 DecodeMap，key 必须是排序后的 hint 组合
-	// 这样无论网络传输层怎么乱序(虽然我们这里是组内乱序)，都能还原
+	// 无论网络传输层怎么乱序，都能还原
 	s := make([]int, 4)
 	for i, h := range hints {
 		s[i] = int(h)

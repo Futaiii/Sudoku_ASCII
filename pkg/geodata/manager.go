@@ -123,7 +123,6 @@ func (m *Manager) parseRule(line string, ipRanges *[]IPRange, exact, suffix map[
 	}
 
 	// 1. 尝试解析 Clash 格式: TYPE,VALUE,...
-	// YAML 解析后，不需要手动去引号，yaml 库已处理。
 	// 格式如: DOMAIN,baidu.com 或 IP-CIDR,1.2.3.4/24,no-resolve
 	parts := strings.Split(line, ",")
 	if len(parts) >= 2 {

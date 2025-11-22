@@ -10,6 +10,9 @@
 [![Latest Release](https://img.shields.io/github/v/release/Futaiii/Sudoku_ASCII?style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
+[中文文档](https://github.com/Futaiii/Sudoku_ASCII/blob/main/README.zh_CN.md)
+
+
 **SUDOKU** is a traffic obfuscation protocol based on 4x4 Sudoku puzzle setting and solving. It maps arbitrary data streams (where data bytes have at most 256 possibilities, while 4x4 Sudoku has 288 non-isomorphic forms) into uniquely solvable Sudoku puzzles using 4 clues. Since each puzzle has at least one setting scheme, the randomization process ensures that the same data can be encoded into multiple combinations, creating obfuscation.
 
 The core concept of this project is to leverage the mathematical properties of Sudoku grids to encode and decode byte streams, while providing arbitrary padding and resistance against active probing.
