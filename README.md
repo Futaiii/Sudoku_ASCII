@@ -1,7 +1,7 @@
 
 <p align="center">
   <img src="./assets/logo-brutal.svg" width="100%">
-A Sudoku‑based proxy protocol that ushered in the era of clear‑text / low‑entropy proxies.
+    A Sudoku-based proxy protocol, ushering in the era of plaintext / low-entropy proxies.
 </p>
 
 # Sudoku ASCII
@@ -10,42 +10,40 @@ A Sudoku‑based proxy protocol that ushered in the era of clear‑text / low‑
 [![Latest Release](https://img.shields.io/github/v/release/Futaiii/Sudoku_ASCII?style=for-the-badge)](https://github.com/Futaiii/Sudoku_ASCII/releases)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=for-the-badge)](./LICENSE)
 
-[中文文档](https://github.com/Futaiii/Sudoku_ASCII/blob/main/README.zh_CN.md)
+**SUDOKU** is a traffic obfuscation protocol based on 4x4 Sudoku puzzle setting and solving. It maps arbitrary data streams (where data bytes have at most 256 possibilities, while 4x4 Sudoku has 288 non-isomorphic forms) into uniquely solvable Sudoku puzzles using 4 clues. Since each puzzle has at least one setting scheme, the randomization process ensures that the same data can be encoded into multiple combinations, creating obfuscation.
 
-Sudoku ASCII is a traffic obfuscation protocol based on combinatorial mathematics. It disguises arbitrary data streams as generated 4×4 Sudoku puzzle clues, making encrypted traffic appear as ordinary logic‑game data.
-
-The core idea of the project is to exploit the mathematical properties of Sudoku grids to achieve **O(1)**‑complexity fast encoding and decoding while providing resistance to active probing.
+The core concept of this project is to leverage the mathematical properties of Sudoku grids to encode and decode byte streams, while providing arbitrary padding and resistance against active probing.
 
 ## Core Features
 
 ### Sudoku Steganography Algorithm
-Unlike traditional random‑noise obfuscation, this protocol uses a pre‑computed Sudoku solution permutation table to convert each byte of data into a set of “clue numbers” on a Sudoku board.
+Unlike traditional random noise obfuscation, this protocol uses various masking schemes to map data streams into complete ASCII printable characters. To packet capture tools, it looks like plain text. Alternatively, other masking schemes can be used to ensure the data stream has sufficiently low entropy.
 
-- **Dynamic Padding**: At any moment, any length of non‑data bytes can be inserted at arbitrary positions, hiding protocol fingerprints.
-- **Data Hiding**: The distribution of padding bytes closely matches that of plaintext bytes (65 %–100 % ASCII proportion), preventing identification via statistical analysis.
-- **Low Information Entropy**: Overall byte Hamming weight is about **3.0** (in low‑entropy mode), lower than the 3.4–4.6 reported by GFW Report.
-- **Efficient Mapping**: Uses a space‑for‑time strategy; the mapping table is generated once at initialization, and runtime operations are simple table lookups.
+*   **Dynamic Padding**: Insert arbitrary length non-data bytes at any position at any time to hide protocol characteristics.
+*   **Data Hiding**: The distribution characteristics of padding bytes match those of the plaintext bytes (65%~100%* ASCII ratio), avoiding identification via data distribution analysis.
+*   **Low Information Entropy**: The overall byte Hamming weight is around 3.0* (in low entropy mode), which is lower than the 3.4~4.6 range typically blocked by firewalls as mentioned in GFW Reports.
 
-> **Note:** 100 % ASCII proportion applies to the ASCII‑preferred mode; the ENTROPY‑preferred mode yields 65 %. A Hamming weight of 3.0 applies to the ENTROPY‑preferred mode; the ASCII‑preferred mode yields 4.0.  
-> Currently there is no evidence that either priority strategy leaves a noticeable fingerprint.
+---
+
+> *Note: A 100% ASCII ratio requires `ASCII preferred` mode; `ENTROPY preferred` mode yields 65%. A Hamming weight of 3.0 requires `ENTROPY preferred` mode; `ASCII preferred` mode yields 4.0.
+
+> Currently, there is no evidence indicating that either preference strategy has a distinct fingerprint.
+
+---
 
 ### Security & Encryption
-Below the obfuscation layer, the protocol optionally employs AEAD (Authenticated Encryption with Associated Data) to protect integrity and confidentiality.
-
-- **Algorithm Support**: AES‑128‑GCM or ChaCha20‑Poly1305.
-- **Replay Protection**: Handshake includes a timestamp check to thwart replay attacks.
+Beneath the obfuscation layer, the protocol optionally uses AEAD to protect data integrity and confidentiality.
+*   **Algorithm Support**: AES-128-GCM or ChaCha20-Poly1305.
+*   **Anti-Replay**: The handshake phase includes timestamp validation to effectively prevent replay attacks.
 
 ### Defensive Fallback
-When the server detects an illegal handshake, a timed‑out connection, or malformed packets, it does **not** terminate the connection (a common proxy‑detection sign). Instead, it silently forwards the connection to a designated decoy address (e.g., an Nginx or Apache server). The probe only sees a normal web‑server response.
+When the server detects illegal handshake requests, connection timeouts, or malformed packets, it does not disconnect immediately . Instead, it seamlessly forwards the connection to a designated decoy address (such as an Nginx or Apache server). Probers will only see a standard web server response.
 
-### Limitations (TODO)
-
-1. **Packet Format**: Supports TCP packets only.  
-2. **Bandwidth Utilization**: Below 30 %; best for users with high‑speed or high‑bandwidth connections, or for “airport” operators to increase traffic.  
-3. **Client Proxy**: SOCKS5 only.  
-4. **Protocol Adoption**: No Android/GUI clients yet, and limited kernel compatibility.
-
-
+### Drawbacks (TODO)
+1.  **Packet Format**: Only supports TCP packets.
+2.  **Bandwidth Utilization**: Less than 30%. Recommended for users with high bandwidth or good network lines. Also recommended for VPN service providers, as it effectively increases user traffic consumption.
+3.  **Client Proxy**: Only supports SOCKS5/HTTP.
+4.  **Protocol Adoption**: No Android/GUI support or other kernel compatibility yet. (A workaround exists: whitelist your VPS IP in rules like Clash, run this protocol locally, then add a SOCKS proxy in your proxy client pointing to this protocol's port).
 
 ## Quick Start
 
@@ -55,7 +53,7 @@ When the server detects an illegal handshake, a timed‑out connection, or malfo
 go build -o sudoku cmd/sudoku-tunnel/main.go
 ```
 
-### Server Configuration (`config.json`)
+### Server Configuration (config.json)
 
 ```json
 {
@@ -74,37 +72,36 @@ go build -o sudoku cmd/sudoku-tunnel/main.go
 
 ### Client Configuration
 
-Change `"mode"` to `"client"`, set `"server_address"` to the server’s IP, set `"local_port"` to the proxy listening port, and add `"rule_urls"` using the template from `configs/config.json`.
+Change `mode` to `client`, set `server_address` to the server IP, set `local_port` to the proxy listening port, and add `rule_urls`. You can use the template in `configs/config.json` to fill it out.
 
 ### Run
-
-Set the path to `config.json` as the argument for `-c`. 
-
+Run the program specifying the path to `config.json` as an argument.
 ```bash
 ./sudoku -c config.json
 ```
 
 ## Protocol Flow
 
-1. **Initialization**: Client and server generate identical Sudoku mapping tables from the pre‑shared key.
-2. **Handshake**: Client sends an encrypted timestamp and random nonce.
-3. **Transmission**: Data → AEAD encrypt → slice → map to Sudoku clues → add padding → send.
-4. **Reception**: Receive data → filter padding → restore Sudoku clues → table lookup decode → AEAD decrypt.
+1.  **Initialization**: Client and Server generate the same Sudoku mapping table based on the Pre-Shared Key (Key).
+2.  **Handshake**: Client sends encrypted timestamp and random nonce.
+3.  **Transmission**: Data -> AEAD Encryption -> Slicing -> Map to Sudoku Clues -> Add Padding -> Send.
+4.  **Reception**: Receive Data -> Filter Padding -> Restore Sudoku Clues -> Lookup Table Decoding -> AEAD Decryption.
 
 ---
 
 ## Disclaimer
 > [!NOTE]\
-> This software is for educational and research purposes only. Users must comply with local network regulations.
+> This software is for educational and research purposes only. Users are responsible for complying with local network regulations.
 
 ## Acknowledgments
 
-- [Link 1](https://gfw.report/publications/usenixsecurity23/zh/)
-- [Link 2](https://github.com/enfein/mieru/issues/8)
-- [Link 3](https://github.com/zhaohuabing/lightsocks)
-- [Link 4](https://imciel.com/2020/08/27/create-custom-tunnel/)
-- [Link 5](https://oeis.org/A109252)
-- [Link 6](https://pi.math.cornell.edu/~mec/Summer2009/Mahmood/Four.html)
+- [Link 1](https://gfw.report/publications/usenixsecurity23/zh/)
+- [Link 2](https://github.com/enfein/mieru/issues/8)
+- [Link 3](https://github.com/zhaohuabing/lightsocks)
+- [Link 4](https://imciel.com/2020/08/27/create-custom-tunnel/)
+- [Link 5](https://oeis.org/A109252)
+- [Link 6](https://pi.math.cornell.edu/~mec/Summer2009/Mahmood/Four.html)
+
 
 ## Star History
 
