@@ -34,6 +34,26 @@ Unlike traditional random noise obfuscation, this protocol uses various masking 
 
 ---
 
+### Uplink/Downlink Separation
+#### — An Attempt to Resolve Downstream Bandwidth Issues Based on the API Provided by [mieru](https://github.com/enfein/mieru/tree/main)
+> Special thanks to the developer of mieru
+
+Since the stream encapsulation of the sudoku protocol leads to increased packet size, bandwidth limitations may occur in streaming and downloading scenarios (theoretically, with 200 Mbps symmetrical uplink/downlink on both the local side and the VPS, bottlenecks should not exist). Therefore, the mieru protocol, which is also a non-TLS solution, is adopted as an (optional) downstream protocol.
+
+#### mieru Configuration
+```json
+  "enable_mieru": true,
+  "mieru_config": {
+    "port": 20123,
+    "transport": "TCP",
+    "mtu": 1400,
+    "multiplexing": "HIGH",
+    "username": "sudoku_user",
+    "password": "your_secure_password_here"
+  }
+```
+**Explanation:** When `"enable_mieru"` is set to `true`, uplink/downlink separation is enabled; when set to `false`, the `"mieru_config"` field can be ignored. Within the `"mieru_config"` field, `port` is mandatory (specifying the downstream port), while other configuration items can be omitted.
+
 ### Security & Encryption
 Beneath the obfuscation layer, the protocol optionally uses AEAD to protect data integrity and confidentiality.
 *   **Algorithm Support**: AES-128-GCM or ChaCha20-Poly1305.

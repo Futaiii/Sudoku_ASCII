@@ -244,13 +244,6 @@ func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *su
 
 		var splitUUID string
 
-		if cfg.EnableMieru {
-			// 标记位：0x01 = Standard, 0x02 = Split Tunnel
-			// 这里我们不仅需要发时间戳，还需要发 UUID
-			// 为了兼容性，我们在标准握手后由协议层约定
-			// 让我们稍微修改一下协议：在写完 Address 之前
-		}
-
 		if _, err := cConn.Write(handshake[:16]); err != nil {
 			cConn.Close()
 			return nil, false
@@ -260,7 +253,7 @@ func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *su
 		if cfg.EnableMieru {
 			splitUUID = hybrid.GenerateUUID()
 			// 发送 Split 标志 (0xFF) + UUID
-			// 这是自定义扩展协议
+			// 标记位：0x01 = Standard, 0x02 = Split Tunnel
 			magic := []byte{0xFF}
 			uuidBytes := []byte(splitUUID) // hex string usually 32 bytes
 			lenByte := byte(len(uuidBytes))
@@ -270,9 +263,7 @@ func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *su
 			cConn.Write([]byte{lenByte})
 			cConn.Write(uuidBytes)
 
-			// 3. 并行建立 Mieru Downlink
-			// 注意：这里会阻塞等待，直到 Mieru 建立完成。
-			// 实际生产中建议用 errgroup 并行，但这里为了逻辑清晰顺序写
+			// 3. 建立 Mieru Downlink
 
 			mConn, err := mgr.DialMieruForDownlink(splitUUID)
 			if err != nil {
@@ -284,12 +275,10 @@ func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *su
 			// 4. 组合连接
 			// Sudoku (cConn) 用于写 (上行)
 			// Mieru (mConn) 用于读 (下行)
-			// 但注意：我们之前写入了 "BIND"，Mieru Conn 可能包含服务端的握手响应。
-			// 服务端在配对成功后，应该直接开始转发数据。
 
 			// 创建混合连接对象
 			hybridConn := &hybrid.SplitConn{
-				Conn:   cConn, // 基础接口用 Sudoku 的
+				Conn:   cConn, // 基础接口用 Sudoku
 				Writer: cConn,
 				Reader: mConn,
 				CloseFn: func() error {
@@ -312,9 +301,6 @@ func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *su
 
 		} else {
 			// 标准模式
-			// 发送 0x00 表示非 Split 模式，或者如果服务端不强制检查，则不需要
-			// 为了兼容旧版 Server，如果旧版 Server 读到 Address 的第一个字节不是 0xFF 而是 AddrType (1,3,4)，则正常
-			// 0xFF 不是有效的 AddrType，所以是兼容的。
 			if err := protocol.WriteAddress(cConn, destAddrStr); err != nil {
 				cConn.Close()
 				return nil, false

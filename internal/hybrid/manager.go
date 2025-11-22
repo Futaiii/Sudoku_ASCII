@@ -16,7 +16,6 @@ import (
 	"github.com/Futaiii/Sudoku_ASCII/internal/config"
 	"github.com/enfein/mieru/v3/apis/model"
 
-	// 根据你的要求修正导入路径
 	mieruClient "github.com/enfein/mieru/v3/apis/client"
 	mieruServer "github.com/enfein/mieru/v3/apis/server"
 
@@ -29,7 +28,6 @@ const (
 )
 
 // === 辅助函数：解决 Protobuf 指针类型不匹配问题 ===
-// Go 无法直接对字面量取地址（例如 &123 是非法的），需要这个辅助函数
 func toPtr[T any](v T) *T {
 	return &v
 }
@@ -107,7 +105,6 @@ func (m *Manager) StartMieruClient() error {
 	}
 
 	// 构造 Mieru Client Profile
-	// 注意：所有字段都使用 toPtr() 转换为指针
 	profile := &appctlpb.ClientProfile{
 		ProfileName: toPtr("sudoku_hybrid"),
 		User: &appctlpb.User{
@@ -235,13 +232,8 @@ func (m *Manager) acceptLoop() {
 		}
 
 		// 异步处理每个连接，防止单个连接的重试阻塞主 Accept 循环
-		go func(c net.Conn, r *model.Request) { // 注意：这里根据你的mieru版本，request类型可能是 *model.Request
-			// 由于你使用了 apis/client, 这里 req 应该是 *model.Request 或类似结构
-			// 假设你的代码中 req.DstAddr.FQDN 是可用的，保持你原有的访问方式即可
-			// 这里为了通用，我保留你原有的逻辑结构，重点在 Retry 逻辑
-
+		go func(c net.Conn, r *model.Request) {
 			// 获取目标地址 (UUID)
-			// 请确保这里的字段访问与你本地编译通过的代码一致
 			dst := req.DstAddr.FQDN
 
 			if strings.HasSuffix(dst, BindingDomainSuffix) {
@@ -252,7 +244,6 @@ func (m *Manager) acceptLoop() {
 					if val, ok := m.pending.Load(uuid); ok {
 						ch := val.(chan net.Conn)
 
-						// === 核心修复开始：发送 SOCKS5 成功响应 ===
 						// Mieru Client (EarlyConn) 在 Write 数据前会等待这个包
 						// 0x05(Ver) 0x00(Success) 0x00(RSV) 0x01(IPv4) ... 0x00(Port)
 						successResp := []byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0}
@@ -261,8 +252,6 @@ func (m *Manager) acceptLoop() {
 							c.Close()
 							return
 						}
-						// === 核心修复结束 ===
-
 						select {
 						case ch <- c:
 							log.Printf("[Hybrid] Paired Mieru downlink for UUID: %s", uuid)
@@ -281,7 +270,6 @@ func (m *Manager) acceptLoop() {
 					log.Printf("[Hybrid] Orphan Mieru connection UUID: %s (Timed out waiting for Sudoku)", uuid)
 					c.Close()
 				}
-				// === 修复结束 ===
 
 			} else {
 				c.Close()

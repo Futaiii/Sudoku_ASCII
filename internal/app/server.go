@@ -106,28 +106,16 @@ func handleServerConn(rawConn net.Conn, cfg *config.Config, table *sudoku.Table,
 		// 成功配对
 		downstreamConn = mConn
 
-		// === 修复点 ===
-		// 必须完整读取 "BIND" 这4个字节。
-		// 如果用 mConn.Read(discardBuf)，可能因为网络包分片只读到部分字节，
-		// 导致后续 io.Copy 时流中混入了剩余的 "IND" 字节。
+		// 完整读取 "BIND" 这
 		discardBuf := make([]byte, 4)
 		if _, err := io.ReadFull(mConn, discardBuf); err != nil {
 			log.Printf("[Server] Failed to read BIND magic from Mieru: %v", err)
 			mConn.Close()
 			return
 		}
-		// 校验一下 (可选)
-		if string(discardBuf) != "BIND" {
-			log.Printf("[Server] Warning: Mieru preamble mismatch: %s", string(discardBuf))
-			// 即使不匹配，通常也继续，因为可能只是脏数据，但为了调试最好打印出来
-		}
 
 	} else {
-		// 不是 Split 模式，把预读的字节放回去？
-		// 或者 Protocol ReadAddress 需要适配。
-		// 既然我们已经读了一个字节，我们需要组合一个 Reader
-		// 简单起见：我们使用 io.MultiReader 组合 magicBuf 和 cConn 传递给 ReadAddress
-		// 但 ReadAddress 接受 io.Reader
+
 		// 重新封装一下
 		upstreamConn = &PreBufferedConn{Conn: cConn, buf: magicBuf}
 	}
@@ -153,8 +141,6 @@ func handleServerConn(rawConn net.Conn, cfg *config.Config, table *sudoku.Table,
 		buf := make([]byte, 32*1024)
 		io.CopyBuffer(target, upstreamConn, buf)
 		target.Close()
-		// 如果是 Split 模式，还需要关闭 Mieru 连接的一端？
-		// 通常由 Defer 里的 Close 处理
 	}()
 
 	// 下行: Target -> Client (Mieru if split, else Sudoku)

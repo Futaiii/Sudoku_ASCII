@@ -29,6 +29,25 @@
 
 ---
 
+### 上下行分离
+#### ——基于[mieru](https://github.com/enfein/mieru/tree/main)提供的API的下行带宽解决尝试
+> 在此特别感谢[mieru](https://github.com/enfein/mieru/tree/main)的开发者
+
+由于sudoku协议对流的封装会导致包增大，对于流媒体和下载场景，可能出现带宽受限的问题（理论本地与VPS各有200mbps上下行不会出现瓶颈），因此采用同样为非TLS方案的mieru协议作(可选的)下行协议。
+#### mieru配置
+```json
+  "enable_mieru": true,
+  "mieru_config": {
+    "port": 20123,
+    "transport": "TCP",
+    "mtu": 1400,
+    "multiplexing": "HIGH",
+    "username": "sudoku_user",
+    "password": "your_secure_password_here"
+  }
+```
+**解释**：`"enable_mieru"`为`true`时即开启上下行分离，为`false`时可忽略`"mieru_config"`字段。`"mieru_config"`字段中必填项为`port`，指定下行端口，其他配置可直接删除。
+
 ### 安全与加密
 在混淆层之下，协议可选的采用 AEAD 保护数据完整性与机密性。
 *   **算法支持**: AES-128-GCM 或 ChaCha20-Poly1305。
@@ -66,13 +85,15 @@ go build -o sudoku cmd/sudoku-tunnel/main.go
   "suspicious_action": "fallback",
   "ascii": "prefer_entropy",
   "padding_min": 2,
-  "padding_max": 7
+  "padding_max": 7,
+  "enable_mieru": true,
+  "mieru_config": {}
 }
 ```
 
 ### 客户端配置
 
-将 `mode` 改为 `client`，并设置 `server_address` 为服务端 IP，将`local_port` 设置为代理监听端口，添加 `rule_urls` 使用`configs/config.json`的模板填充即可。
+将 `mode` 改为 `client`，并设置 `server_address` 为服务端 IP，将`local_port` 设置为代理监听端口，添加 `rule_urls` 使用`configs/config.json`的模板填充，以及按照模板配置上下行分离配置即可。
 
 ### 运行
 指定 `config.json` 路径为参数运行程序
