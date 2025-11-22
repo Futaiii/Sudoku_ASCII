@@ -17,9 +17,12 @@ type Config struct {
 	SuspiciousAction string   `json:"suspicious_action"` // "fallback" or "silent"
 	PaddingMin       int      `json:"padding_min"`
 	PaddingMax       int      `json:"padding_max"`
-	RuleURLs         []string `json:"rule_urls"`  // 留空则使用默认，支持 "global", "direct" 关键字
-	ProxyMode        string   `json:"proxy_mode"` // 运行时状态，非JSON字段，由Load解析逻辑填充
-	ASCII            string   `json:"ascii"`      // "prefer_entropy" (默认): 旧模式, 低熵, 二进制混淆"，prefer_ascii": 新模式, 纯ASCII字符，高熵
+	RuleURLs         []string `json:"rule_urls"`         // 留空则使用默认，支持 "global", "direct" 关键字
+	ProxyMode        string   `json:"proxy_mode"`        // 运行时状态，非JSON字段，由Load解析逻辑填充
+	ASCII            string   `json:"ascii"`             // "prefer_entropy" (默认): 低熵，"prefer_ascii": 纯ASCII字符
+	UpstreamProto    string   `json:"upstream_proto"`    // "sudoku" (默认), "mieru" (透传), "plain" (直连)
+	DownstreamProto  string   `json:"downstream_proto"`  // "sudoku" (默认), "mieru" (透传), "plain" (直连)
+	MieruConfigPath  string   `json:"mieru_config_path"` // Mieru 配置文件路径 (可选)
 }
 
 func Load(path string) (*Config, error) {
@@ -40,6 +43,14 @@ func Load(path string) (*Config, error) {
 
 	if cfg.ASCII == "" {
 		cfg.ASCII = "prefer_entropy"
+	}
+
+	// 默认全双工 Sudoku
+	if cfg.UpstreamProto == "" {
+		cfg.UpstreamProto = "sudoku"
+	}
+	if cfg.DownstreamProto == "" {
+		cfg.DownstreamProto = "sudoku"
 	}
 
 	// 处理 ProxyMode 和 默认规则

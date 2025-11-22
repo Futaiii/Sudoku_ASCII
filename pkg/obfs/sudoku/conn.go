@@ -1,4 +1,3 @@
-// pkg/obfs/sudoku/conn.go
 package sudoku
 
 import (
@@ -14,6 +13,15 @@ import (
 
 const IOBufferSize = 32 * 1024
 
+// Direction 定义 Sudoku 工作的方向
+type Direction int
+
+const (
+	DirDuplex    Direction = 0 // 读写都混淆
+	DirWriteOnly Direction = 1 // 只混淆写（上行），读透传
+	DirReadOnly  Direction = 2 // 只混淆读（下行），写透传
+)
+
 type Conn struct {
 	net.Conn
 	table      *Table
@@ -28,9 +36,14 @@ type Conn struct {
 
 	rng         *rand.Rand
 	paddingRate float32
+
+	// 方向控制
+	enableObfsWrite bool
+	enableObfsRead  bool
 }
 
-func NewConn(c net.Conn, table *Table, pMin, pMax int, record bool) *Conn {
+// Update NewConn signature
+func NewConn(c net.Conn, table *Table, pMin, pMax int, record bool, dir Direction) *Conn {
 	var seedBytes [8]byte
 	if _, err := crypto_rand.Read(seedBytes[:]); err != nil {
 		binary.BigEndian.PutUint64(seedBytes[:], uint64(rand.Int63()))
@@ -51,6 +64,10 @@ func NewConn(c net.Conn, table *Table, pMin, pMax int, record bool) *Conn {
 		hintBuf:     make([]byte, 0, 4),
 		rng:         localRng,
 		paddingRate: rate,
+
+		// 初始化方向
+		enableObfsWrite: dir == DirDuplex || dir == DirWriteOnly,
+		enableObfsRead:  dir == DirDuplex || dir == DirReadOnly,
 	}
 	if record {
 		sc.recorder = new(bytes.Buffer)
@@ -87,6 +104,11 @@ func (sc *Conn) GetBufferedAndRecorded() []byte {
 }
 
 func (sc *Conn) Write(p []byte) (n int, err error) {
+	// 如果禁用了写混淆，直接透传
+	if !sc.enableObfsWrite {
+		return sc.Conn.Write(p)
+	}
+
 	if len(p) == 0 {
 		return 0, nil
 	}
@@ -125,6 +147,11 @@ func (sc *Conn) Write(p []byte) (n int, err error) {
 }
 
 func (sc *Conn) Read(p []byte) (n int, err error) {
+	// 如果禁用了读混淆，直接读取原始数据
+	if !sc.enableObfsRead {
+		return sc.reader.Read(p)
+	}
+
 	if len(sc.pendingData) > 0 {
 		n = copy(p, sc.pendingData)
 		if n == len(sc.pendingData) {
@@ -153,15 +180,10 @@ func (sc *Conn) Read(p []byte) (n int, err error) {
 				isPadding := false
 
 				if sc.table.IsASCII {
-					// === ASCII Mode ===
-					// Padding: 001xxxxx (Bit 6 is 0) -> (b & 0x40) == 0
-					// Hint:    01vvpppp (Bit 6 is 1) -> (b & 0x40) != 0
 					if (b & 0x40) == 0 {
 						isPadding = true
 					}
 				} else {
-					// === Entropy Mode ===
-					// Padding: 0x80... or 0x10... -> (b & 0x90) != 0
 					if (b & 0x90) != 0 {
 						isPadding = true
 					}
@@ -176,7 +198,6 @@ func (sc *Conn) Read(p []byte) (n int, err error) {
 					key := packHintsToKey([4]byte{sc.hintBuf[0], sc.hintBuf[1], sc.hintBuf[2], sc.hintBuf[3]})
 					val, ok := sc.table.DecodeMap[key]
 					if !ok {
-						// 在 ASCII 模式下，这可能是非常严重的错误或攻击
 						return 0, errors.New("INVALID_SUDOKU_MAP_MISS")
 					}
 					sc.pendingData = append(sc.pendingData, val)

@@ -16,6 +16,7 @@ import (
 
 	"github.com/Futaiii/Sudoku_ASCII/internal/config"
 	"github.com/Futaiii/Sudoku_ASCII/internal/protocol"
+	mieruAdapter "github.com/Futaiii/Sudoku_ASCII/pkg/adapter/mieru"
 	"github.com/Futaiii/Sudoku_ASCII/pkg/crypto"
 	"github.com/Futaiii/Sudoku_ASCII/pkg/geodata"
 	"github.com/Futaiii/Sudoku_ASCII/pkg/obfs/sudoku"
@@ -37,6 +38,14 @@ func (c *PeekConn) Read(p []byte) (n int, err error) {
 }
 
 func RunClient(cfg *config.Config, table *sudoku.Table) {
+	if cfg.MieruConfigPath != "" {
+		go func() {
+			if _, err := mieruAdapter.StartMieruClient(cfg.MieruConfigPath); err != nil {
+				log.Printf("[Mieru] Failed to start client: %v", err)
+			}
+		}()
+	}
+
 	var geoMgr *geodata.Manager
 	if cfg.ProxyMode == "pac" {
 		geoMgr = geodata.GetInstance(cfg.RuleURLs)
@@ -217,36 +226,66 @@ func dialTarget(destAddrStr string, destIP net.IP, cfg *config.Config, table *su
 	}
 
 	if shouldProxy {
-		// 通过 Sudoku 代理连接
+		// 1. 建立 TCP 连接
 		rawRemote, err := net.DialTimeout("tcp", cfg.ServerAddress, 5*time.Second)
 		if err != nil {
 			log.Printf("[Proxy] Dial Server Failed: %v", err)
 			return nil, false
 		}
 
-		sConn := sudoku.NewConn(rawRemote, table, cfg.PaddingMin, cfg.PaddingMax, false)
-		cConn, err := crypto.NewAEADConn(sConn, cfg.Key, cfg.AEAD)
+		// 2. 决定 Sudoku 方向
+		// 默认是 Duplex
+		dir := sudoku.DirDuplex
+
+		// 如果上行是 sudoku，下行不是 sudoku (例如 mieru)，则 Sudoku 只负责写 (Upstream)
+		if cfg.UpstreamProto == "sudoku" && cfg.DownstreamProto != "sudoku" {
+			dir = sudoku.DirWriteOnly
+		} else if cfg.UpstreamProto != "sudoku" && cfg.DownstreamProto == "sudoku" {
+			// 这种情况比较少见，下行混淆上行不混淆
+			dir = sudoku.DirReadOnly
+		}
+
+		// 3. 包装 Sudoku 层
+		sConn := sudoku.NewConn(rawRemote, table, cfg.PaddingMin, cfg.PaddingMax, false, dir)
+
+		// 4. 加密层 (AEAD)
+		// 如果协议分离，暂时禁用 AEAD (设为 none)
+		// 为了生产环境稳定，建议在分离模式下，config中AEAD 设为 "none" (完全依赖协议自身的安全性)
+
+		effectiveAEAD := cfg.AEAD
+		if dir != sudoku.DirDuplex {
+			// 在混合协议模式下，为了避免加密层冲突，暂时强制 AEAD 失效（或者需要类似 Sudoku 的单向改造）
+			effectiveAEAD = "none"
+		}
+
+		cConn, err := crypto.NewAEADConn(sConn, cfg.Key, effectiveAEAD)
 		if err != nil {
 			rawRemote.Close()
 			return nil, false
 		}
 
-		// 握手
-		handshake := make([]byte, 16)
-		binary.BigEndian.PutUint64(handshake[:8], uint64(time.Now().Unix()))
-		rand.Read(handshake[8:])
-		if _, err := cConn.Write(handshake); err != nil {
-			cConn.Close()
-			return nil, false
+		// 5. 握手
+		// 如果上行是 Sudoku，我们需要发送握手。
+		if cfg.UpstreamProto == "sudoku" {
+			handshake := make([]byte, 16)
+			binary.BigEndian.PutUint64(handshake[:8], uint64(time.Now().Unix()))
+			rand.Read(handshake[8:])
+			if _, err := cConn.Write(handshake); err != nil {
+				cConn.Close()
+				return nil, false
+			}
+
+			if err := protocol.WriteAddress(cConn, destAddrStr); err != nil {
+				cConn.Close()
+				return nil, false
+			}
 		}
 
-		if err := protocol.WriteAddress(cConn, destAddrStr); err != nil {
-			cConn.Close()
-			return nil, false
-		}
+		// 返回连接。
+
 		return cConn, true
 	} else {
-		// 直连
+		// 直连逻辑保持不变
 		dConn, err := net.DialTimeout("tcp", destAddrStr, 5*time.Second)
 		if err != nil {
 			log.Printf("[Direct] Dial Failed: %v", err)
