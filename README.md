@@ -67,20 +67,20 @@ go build -o sudoku cmd/sudoku-tunnel/main.go
   "suspicious_action": "fallback",
   "ascii": "prefer_entropy",
   "padding_min": 10,
-  "padding_max": 30
+  "padding_max": 15
 }
 ```
 
 ### Client Configuration
 
-Change `"mode"` to `"client"`, set `"server_address"` to the server’s IP, set `"local_port"` to the proxy listening port, and add `geoip_url` using the template from `configs/config.json`.
+Change `"mode"` to `"client"`, set `"server_address"` to the server’s IP, set `"local_port"` to the proxy listening port, and add `rule_urls` using the template from `configs/config.json`.
 
 ### Run
 
-Place `config.json` in the same directory as the `sudoku` binary and execute:
+Set the path to `config.json` as the argument for `-c`. 
 
 ```bash
-./sudoku
+./sudoku -c config.json
 ```
 
 ## Protocol Flow
@@ -93,7 +93,7 @@ Place `config.json` in the same directory as the `sudoku` binary and execute:
 ---
 
 ## Disclaimer
-> **Note**  
+> [!NOTE]\
 > This software is for educational and research purposes only. Users must comply with local network regulations.
 
 ## Acknowledgments

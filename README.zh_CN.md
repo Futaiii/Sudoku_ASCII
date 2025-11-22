@@ -66,18 +66,18 @@ go build -o sudoku cmd/sudoku-tunnel/main.go
   "suspicious_action": "fallback",
   "ascii": "prefer_entropy",
   "padding_min": 10,
-  "padding_max": 30
+  "padding_max": 15
 }
 ```
 
 ### 客户端配置
 
-将 `mode` 改为 `client`，并设置 `server_address` 为服务端 IP，将`local_port` 设置为代理监听端口，添加`geoip_url`使用`configs/config.json`的模板填充即可。
+将 `mode` 改为 `client`，并设置 `server_address` 为服务端 IP，将`local_port` 设置为代理监听端口，添加`rule_urls`使用`configs/config.json`的模板填充即可。
 
 ### 运行
-将 `config.json` 放置在sudoku同一目录下，并运行
+指定 `config.json` 路径为参数运行程序
 ```bash
-./sudoku
+./sudoku -c config.json
 ```
 
 ## 协议流程
